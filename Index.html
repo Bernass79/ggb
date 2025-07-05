@@ -145,6 +145,30 @@
             color: #1565c0;
             border: 1px solid #bbdefb;
         }
+
+        .config-section {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ffeaa7;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .config-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #856404;
+        }
     </style>
 </head>
 <body>
@@ -153,6 +177,16 @@
         <h1>Captura de IP</h1>
         <p class="subtitle">Detecta e envia seu IP automaticamente</p>
         
+        <div class="config-section">
+            <label class="config-label">🔧 URL do Bot:</label>
+            <div style="background: #fff; padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                <code id="botUrlDisplay">http://localhost:3000</code>
+            </div>
+            <small style="color: #856404; display: block; margin-top: 5px;">
+                Altere a URL no código se necessário
+            </small>
+        </div>
+
         <div class="info-box">
             <strong>ℹ️ Informação:</strong> Seu IP será detectado automaticamente e enviado para o bot do Discord.
         </div>
@@ -176,7 +210,14 @@
 
     <script>
         let userIP = null;
-        const BOT_WEBHOOK_URL = 'https://discord.com/api/webhooks/YOUR_WEBHOOK_URL'; // Substitua pela sua webhook
+        
+        // CONFIGURE A URL DO SEU BOT AQUI
+        const BOT_URL = 'http://127.0.0.1:5504/'; // Altere para a URL do seu bot
+        
+        // Atualiza a exibição da URL
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('botUrlDisplay').textContent = BOT_URL;
+        });
 
         // Função para detectar IP do usuário
         async function detectUserIP() {
@@ -278,48 +319,62 @@
             messageDiv.innerHTML = '';
 
             try {
-                // Envia IP para o webhook que o bot irá processar
-                const payload = {
-                    content: `🌐 **NOVO IP DETECTADO**`,
-                    embeds: [{
-                        title: "📍 IP Capturado",
-                        color: 0x00ff00,
-                        fields: [
-                            {
-                                name: "Endereço IP",
-                                value: `\`${userIP}\``,
-                                inline: true
-                            },
-                            {
-                                name: "Data/Hora",
-                                value: new Date().toLocaleString('pt-BR'),
-                                inline: true
-                            }
-                        ],
-                        timestamp: new Date().toISOString(),
-                        footer: {
-                            text: "Sistema de Captura de IP"
+                // Primeiro, testa se o bot está online
+                console.log('Testando conexão com o bot...');
+                
+                try {
+                    const testResponse = await fetch(`${BOT_URL}/test`, {
+                        method: 'GET',
+                        mode: 'cors',
+                        headers: {
+                            'Content-Type': 'application/json',
                         }
-                    }]
-                };
+                    });
+                    
+                    if (!testResponse.ok) {
+                        throw new Error('Bot não está respondendo');
+                    }
+                    
+                    console.log('Bot está online, enviando IP...');
+                } catch (testError) {
+                    console.warn('Erro no teste:', testError);
+                    throw new Error('Bot não está rodando ou não está acessível');
+                }
 
-                const response = await fetch(BOT_WEBHOOK_URL, {
+                // Envia IP via rota /ip
+                const response = await fetch(`${BOT_URL}/ip`, {
                     method: 'POST',
+                    mode: 'cors',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        ip: userIP
+                    })
                 });
 
                 if (response.ok) {
-                    showMessage(`✅ IP enviado com sucesso!<br>IP: ${userIP}<br>Enviado em: ${new Date().toLocaleString('pt-BR')}`, 'success');
+                    const result = await response.json();
+                    showMessage(`✅ IP enviado com sucesso!<br>IP: ${userIP}<br>Enviado em: ${new Date().toLocaleString('pt-BR')}<br>Resposta: ${result.message}`, 'success');
                 } else {
-                    throw new Error(`Erro HTTP: ${response.status}`);
+                    const errorText = await response.text();
+                    throw new Error(`Erro HTTP: ${response.status} - ${errorText}`);
                 }
 
             } catch (error) {
                 console.error('Erro ao enviar IP:', error);
-                showMessage(`❌ Erro ao enviar IP: ${error.message}`, 'error');
+                let errorMessage = `❌ Erro ao enviar IP: ${error.message}`;
+                
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('não está acessível')) {
+                    errorMessage += '<br><br>💡 <strong>Possíveis soluções:</strong><br>';
+                    errorMessage += '• Verifique se o bot Python está rodando (execute: python bot.py)<br>';
+                    errorMessage += '• Confirme se a URL está correta no código<br>';
+                    errorMessage += '• Teste acessando ' + BOT_URL + '/test no navegador<br>';
+                    errorMessage += '• Verifique se a porta 3000 não está bloqueada<br>';
+                    errorMessage += '• Se usando HTTPS, o bot também precisa usar HTTPS';
+                }
+                
+                showMessage(errorMessage, 'error');
             } finally {
                 sendBtn.disabled = false;
                 loadingDiv.style.display = 'none';
